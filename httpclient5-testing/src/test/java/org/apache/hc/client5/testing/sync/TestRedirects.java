@@ -33,6 +33,7 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import org.apache.hc.client5.http.CircularRedirectException;
@@ -56,6 +57,7 @@ import org.apache.hc.client5.testing.redirect.Redirect;
 import org.apache.hc.client5.testing.sync.extension.TestClientResources;
 import org.apache.hc.core5.function.Decorator;
 import org.apache.hc.core5.http.ClassicHttpRequest;
+import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpException;
 import org.apache.hc.core5.http.HttpHeaders;
@@ -64,6 +66,7 @@ import org.apache.hc.core5.http.HttpRequest;
 import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.ProtocolException;
 import org.apache.hc.core5.http.URIScheme;
+import org.apache.hc.core5.http.io.HttpRequestHandler;
 import org.apache.hc.core5.http.io.HttpServerRequestHandler;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
@@ -652,6 +655,49 @@ public abstract class TestRedirects {
         assertThat(values.poll(), CoreMatchers.equalTo("gzip, x-gzip, deflate"));
         assertThat(values.poll(), CoreMatchers.equalTo("gzip, x-gzip, deflate"));
         assertThat(values.poll(), CoreMatchers.nullValue());
+    }
+
+    @Test
+    public void testRetryUponRedirect() throws Exception {
+        final ClassicTestServer server = startServer(null, requestHandler -> new RedirectingDecorator(
+                requestHandler,
+                new OldPathRedirectResolver("/oldlocation", "/random", HttpStatus.SC_MOVED_TEMPORARILY)));
+        server.registerHandler("/random/*", new HttpRequestHandler() {
+
+            final AtomicLong count = new AtomicLong();
+
+            @Override
+            public void handle(final ClassicHttpRequest request,
+                               final ClassicHttpResponse response,
+                               final HttpContext context) throws HttpException, IOException {
+                if (count.incrementAndGet() == 1) {
+                    throw new IOException("Boom");
+                } else {
+                    response.setCode(200);
+                    response.setEntity(new StringEntity("test"));
+                }
+            }
+
+        });
+        final HttpHost target = targetHost();
+
+        final CloseableHttpClient client = startClient();
+        final HttpClientContext context = HttpClientContext.create();
+
+        final HttpGet httpget = new HttpGet("/oldlocation/50");
+
+        client.execute(target, httpget, context, response -> {
+            Assertions.assertEquals(HttpStatus.SC_OK, response.getCode());
+            EntityUtils.consume(response.getEntity());
+            return null;
+        });
+        final HttpRequest reqWrapper = context.getRequest();
+
+        Assertions.assertEquals(new URIBuilder()
+                        .setHttpHost(target)
+                        .setPath("/random/50")
+                        .build(),
+                reqWrapper.getUri());
     }
 
 }

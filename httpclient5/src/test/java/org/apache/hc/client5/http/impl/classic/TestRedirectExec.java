@@ -122,7 +122,7 @@ public class TestRedirectExec {
         redirectExec.execute(request, scope, chain);
 
         final ArgumentCaptor<ClassicHttpRequest> reqCaptor = ArgumentCaptor.forClass(ClassicHttpRequest.class);
-        Mockito.verify(chain, Mockito.times(2)).proceed(reqCaptor.capture(), ArgumentMatchers.same(scope));
+        Mockito.verify(chain, Mockito.times(2)).proceed(reqCaptor.capture(), ArgumentMatchers.any());
 
         final List<ClassicHttpRequest> allValues = reqCaptor.getAllValues();
         Assertions.assertNotNull(allValues);
@@ -395,7 +395,7 @@ public class TestRedirectExec {
         Assertions.assertEquals(200, finalResponse.getCode());
 
         final ArgumentCaptor<ClassicHttpRequest> reqCaptor = ArgumentCaptor.forClass(ClassicHttpRequest.class);
-        Mockito.verify(chain, Mockito.times(3)).proceed(reqCaptor.capture(), ArgumentMatchers.same(scope));
+        Mockito.verify(chain, Mockito.times(3)).proceed(reqCaptor.capture(), ArgumentMatchers.any());
 
         final List<ClassicHttpRequest> allValues = reqCaptor.getAllValues();
         Assertions.assertNotNull(allValues);
